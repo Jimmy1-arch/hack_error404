@@ -8,10 +8,66 @@ This README provides a highly detailed, section-by-section breakdown of the enti
 
 ## 🏗️ Architecture Overview
 
+The system operates across four primary layers that communicate seamlessly via WebSockets and local HTTP requests to create a unified incident resolution experience.
+
+```mermaid
+graph TD
+    subgraph Web Environment
+        NextJS[Next.js Dashboard UI]
+    end
+
+    subgraph Desktop Environment
+        VoiceAgent[Python Desktop Voice Agent]
+        VSCode[VS Code Extension]
+    end
+    
+    subgraph Backend Services
+        FastAPI[FastAPI WebSocket Server]
+        LangGraph[LangGraph Multi-Agent Orchestrator]
+        Ollama[Local LLMs via Ollama]
+    end
+
+    NextJS <-->|Global WebSockets & HTTP| FastAPI
+    FastAPI -->|Activates Process| VoiceAgent
+    VoiceAgent <-->|Local WebSockets :8765| VSCode
+    FastAPI <-->|State Routing| LangGraph
+    LangGraph <-->|Inference Tasks| Ollama
+```
+
 1. **Frontend (Next.js)**: A dashboard with local persistence (`localStorage`), simulated environments, and live WebSocket subscriptions.
 2. **Backend (FastAPI + LangGraph)**: Orchestrates local AI models (via Ollama) and manages global WebSocket states to push real-time updates to the web app.
 3. **Voice Agent & Desktop Overlay (Python)**: A desktop assistant using `pygame` and `Tkinter` to provide voice interaction and visual permission prompts natively on the OS.
 4. **VS Code Extension (TypeScript)**: Runs a local WebSocket server (port 8765) to stream editor diagnostics to the AI and apply autonomous code modifications.
+
+---
+
+## 🔄 Core Resolution Workflow Diagram
+
+The true power of DevOps Copilot lies in its ability to bridge the browser-based dashboard with the user's local IDE. Below is the sequence diagram detailing the automated fix workflow:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NextJS as Next.js Dashboard
+    participant FastAPI as Backend (FastAPI)
+    participant VoiceAgent as Desktop Voice Agent
+    participant VSCode as VS Code Extension
+
+    User->>NextJS: Clicks "✓ Send to Agent" on Incident
+    NextJS->>FastAPI: POST /api/voice/activate
+    FastAPI->>VoiceAgent: Spawns Tkinter UI & TTS
+    VoiceAgent-->>VSCode: Connects to WS (Port 8765)
+    VoiceAgent->>VSCode: Requests file context & diagnostics
+    VSCode-->>VoiceAgent: Returns lint errors
+    VoiceAgent->>User: Proposes code fix (Voice Output)
+    VoiceAgent->>VoiceAgent: Displays "Allow/Deny" overlay
+    User->>VoiceAgent: Clicks "Allow"
+    VoiceAgent->>VSCode: Sends applyEdit payload
+    VSCode-->>VoiceAgent: Confirms edit success
+    VoiceAgent->>FastAPI: Broadcasts {status: "resolved"}
+    FastAPI-->>NextJS: Pushes event via Global WS
+    NextJS->>User: Incident visually updates to "Resolved"
+```
 
 ---
 
