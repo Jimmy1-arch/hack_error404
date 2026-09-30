@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   const { title, description } = await req.json();
   const model = process.env.TICKET_KB_MODEL || 'qwen2.5:3b';
-  const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const baseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
   
   const systemPrompt = "You are the Ticket & Knowledge Base Agent. Based on the following support ticket, analyze the description, suggest a potential root cause, and identify if there is a known runbook or historical fix for this issue. Be concise.";
   

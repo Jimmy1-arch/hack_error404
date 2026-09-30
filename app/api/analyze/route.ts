@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 async function callOllama(model: string, systemPrompt: string, userPrompt: string) {
-  const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const baseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
   try {
     const response = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
   // Tasks (System Prompts)
   const logTask = "You are the Log Analysis Agent. Analyze the incident logs and metrics. Identify anomalies, stack traces, and repeated failure signals. Output a concise structured summary.";
   const codeTask = "You are the Code & Commit Agent. Analyze the incident deploy information and correlate it with the failure. Flag suspicious changes. Output a concise summary.";
-  const orchestratorTask = "You are the Orchestrator Agent. Synthesize findings from other agents into a root-cause hypothesis and confidence level. Output 'Root-cause hypothesis', 'Confidence', and 'Timeline'.";
-  const fixTask = "You are the Fix Agent. Based on the Orchestrator's hypothesis, draft a remediation plan. Output 'Suggested fix' and 'Runbook steps'.";
+  const orchestratorTask = "You are the Orchestrator Agent. Synthesize findings from other agents into a root-cause hypothesis and confidence level. Output a professional incident response. Do NOT use markdown headers (no # or ##). Use **double asterisks** for bolding key terms. Structure your output exactly with these sections: '**Root-cause hypothesis:**' and '**Timeline:**'. Be concise and actionable.";
+  const fixTask = "You are the Fix Agent. Based on the Orchestrator's hypothesis, draft a professional remediation plan. Do NOT use markdown headers (no # or ##). Use **double asterisks** for bolding key terms. Structure your output exactly with these sections: '**Suggested fix:**' and '**Runbook steps:**' (use numbered lists like 1. 2.). Be concise and actionable.";
   
   // Parallel execution for Log and Code analysis
   const [logFindings, codeFindings] = await Promise.all([
