@@ -4,19 +4,28 @@ import json
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections[session_id] = websocket
+        if session_id not in self.active_connections:
+            self.active_connections[session_id] = []
+        self.active_connections[session_id].append(websocket)
 
-    def disconnect(self, session_id: str):
+    def disconnect(self, session_id: str, websocket: WebSocket):
         if session_id in self.active_connections:
-            del self.active_connections[session_id]
+            if websocket in self.active_connections[session_id]:
+                self.active_connections[session_id].remove(websocket)
+            if not self.active_connections[session_id]:
+                del self.active_connections[session_id]
 
     async def send_personal_message(self, message: str, session_id: str):
         if session_id in self.active_connections:
-            await self.active_connections[session_id].send_text(message)
+            for ws in self.active_connections[session_id]:
+                try:
+                    await ws.send_text(message)
+                except Exception:
+                    pass
 
     async def broadcast_status(self, session_id: str, agent_name: str, status: str, output: str = ""):
         payload = {

@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "D:\\DevOps Copilot\\hack_error404\\backend\\.venv\\Scripts\\python.exe",
+  "python.analysis.extraPaths": [
+    "D:\\DevOps Copilot\\hack_error404\\backend\\.venv\\Lib\\site-packages",
+    "D:\\DevOps Copilot\\hack_error404\\backend"
+  ]
+}

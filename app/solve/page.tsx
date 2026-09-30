@@ -18,7 +18,7 @@ const seed:Incident[]=[
  {id:'INC-2037',title:'Certificate chain mismatch',service:'internal-proxy',severity:'SEV4',status:'Resolved',time:'5h ago',summary:'Internal health probe reported an unexpected issuer.',payload:'alert: tls_probe_chain_valid == 0\nendpoint: proxy.internal',logs:['09:04:01 WARN unknown issuer','09:09:02 INFO certificate bundle refreshed'],metrics:[60,51,44,35,30,25,21,18],deploy:'Trust bundle refreshed'}
 ];
 const sevRank=(s:string)=>Number(s.slice(-1));
-type Section='Incident inbox'|'Tickets'|'On-call'|'Assistant'|'Integrations'|'Settings';
+type Section='Incident inbox'|'Agent Orchestration'|'Tickets'|'On-call'|'Assistant'|'Integrations'|'Settings';
 type Ticket={id:string;title:string;category:string;priority:string;description:string;status:string;createdAt:string};
 type ChatMessage={role:'agent'|'user';text:string;time:string;attachmentUrl?:string;attachmentName?:string};
 
@@ -34,6 +34,28 @@ function formatAnalysis(text: string) {
 }
 
 export default function Solve(){const [incidents,setIncidents]=useState(seed);const [selected,setSelected]=useState(seed[0]);const [search,setSearch]=useState('');const [severity,setSeverity]=useState('All severity');const [service,setService]=useState('All services');const [status,setStatus]=useState('All status');const [analysis,setAnalysis]=useState('');const [running,setRunning]=useState(false);const [toast,setToast]=useState('');const [activeSection,setActiveSection]=useState<Section>('Incident inbox');const [tickets,setTickets]=useState<Ticket[]>([]);const [chatMessages,setChatMessages]=useState<ChatMessage[]>([{role:'agent',text:'Hi, I’m your DevOps Copilot support agent. Tell me what is going wrong, and I’ll help you capture the details or open a support ticket.',time:'Now'}]); const [openBook,setOpenBook]=useState(''); const [range,setRange]=useState('24 hours'); const [prefs,setPrefs]=useState({readOnly:true,approval:true,auto:false});
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:8000/ws/chat/global');
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.status === 'resolved') {
+            setIncidents(prev => {
+                const first = prev.find(i => i.status !== 'Resolved');
+                if (!first) return prev;
+                return prev.map(inc => inc.id === first.id ? {...inc, status: 'Resolved'} : inc);
+            });
+            setTickets(prev => {
+                const first = prev.find(t => t.status !== 'Resolved' && t.status !== 'Closed');
+                if (!first) return prev;
+                return prev.map(t => t.id === first.id ? {...t, status: 'Resolved'} : t);
+            });
+        }
+      } catch(err) {}
+    };
+    return () => ws.close();
+  }, []);
  useEffect(() => {
     try {
       const rawTickets = JSON.parse(localStorage.getItem('devops-support-tickets') || '[]');
@@ -56,9 +78,16 @@ export default function Solve(){const [incidents,setIncidents]=useState(seed);co
         time: t.createdAt,
         summary: t.description,
         payload: 'User reported issue via support ticket.\n' + t.description.slice(0, 100),
-        logs: ['Ticket created: ' + t.createdAt, 'Awaiting triage'],
-        metrics: [0, 0, 0, 0, 0, 0, 0, 0],
-        deploy: 'N/A'
+        logs: [
+          'Ticket created: ' + t.createdAt,
+          'Awaiting triage',
+          '---',
+          'System: Auto-correlating recent events...',
+          'WARN: High latency or error rate detected in ' + (t.category || 'support') + ' service',
+          'ERR: ' + t.title
+        ],
+        metrics: [20, 22, 25, 30, 85, 90, 88, 95],
+        deploy: `Deploy v2.1${Math.floor(Math.random()*10)}.${Math.floor(Math.random()*10)}\nCommit: "Fix issue with ${t.title.substring(0, 15)}..."\nAuthor: DevOps Copilot\nStatus: Rolled out 5 mins ago`
       }));
       if (ticketIncidents.length > 0) {
         setIncidents(prev => {
@@ -95,9 +124,16 @@ export default function Solve(){const [incidents,setIncidents]=useState(seed);co
     time: ticket.createdAt,
     summary: ticket.description,
     payload: 'User reported issue.\n' + ticket.description.slice(0, 100),
-    logs: ['Ticket created: ' + ticket.createdAt],
-    metrics: [20, 20, 20, 20, 20, 20, 20, 20],
-    deploy: 'N/A'
+    logs: [
+      'Ticket created: ' + ticket.createdAt,
+      'Awaiting triage',
+      '---',
+      'System: Auto-correlating recent events...',
+      'WARN: High latency or error rate detected in ' + (ticket.category || 'support') + ' service',
+      'ERR: ' + ticket.title
+    ],
+    metrics: [20, 22, 25, 30, 85, 90, 88, 95],
+    deploy: `Deploy v2.1${Math.floor(Math.random()*10)}.${Math.floor(Math.random()*10)}\nCommit: "Fix issue with ${ticket.title.substring(0, 15)}..."\nAuthor: DevOps Copilot\nStatus: Rolled out 5 mins ago`
   };
   setIncidents(prev => {
     if (prev.some(i => i.id === ticketIncident.id)) return prev;
@@ -107,11 +143,11 @@ export default function Solve(){const [incidents,setIncidents]=useState(seed);co
   notify(`${ticket.id} created and added to your tickets.`);
   return ticket;
 }
- const navItems:Section[]=['Incident inbox','Tickets','On-call','Assistant','Integrations','Settings'];
- return <main className={`solve ${activeSection!=='Incident inbox'?'has-other-view':''}`}><aside className="solve-sidebar"><Link className="brand" href="/"><span className="mark">⌘</span>DevOps Copilot</Link><div className="workspace-tag">WORKSPACE</div>{navItems.map((item,i)=><button key={item} className={`side-item ${activeSection===item?'on':''}`} onClick={()=>setActiveSection(item)}>{['▣','▤','◷','◉','⌘','⚙'][i]} &nbsp; {item}{item==='Incident inbox'&&<span>{incidents.filter(i=>i.status!=='Resolved').length}</span>}{item==='Tickets'&&<span>{tickets.length}</span>}</button>)}<div className="side-bottom"><button className="side-item" onClick={()=>setActiveSection('Settings')}>⚙ &nbsp; Workspace settings</button><Link className="side-item" href="/#faq">↗ &nbsp; Help center</Link></div></aside>
- <section className="solve-main"><div className="solve-top"><b>{activeSection}</b>{activeSection==='Incident inbox'&&<button className="simulate" onClick={simulate}>＋ Simulate new incident</button>}</div><div className="inbox-tools"><input placeholder="⌕  Search incidents" value={search} onChange={e=>setSearch(e.target.value)}/><select value={severity} onChange={e=>setSeverity(e.target.value)}><option>All severity</option>{['SEV1','SEV2','SEV3','SEV4'].map(s=><option key={s}>{s}</option>)}</select><select value={service} onChange={e=>setService(e.target.value)}><option>All services</option>{services.map(s=><option key={s}>{s}</option>)}</select><select value={status} onChange={e=>setStatus(e.target.value)}><option>All status</option>{['Open','Investigating','Acknowledged','Resolved','Escalated'].map(s=><option key={s}>{s}</option>)}</select></div><div className="incident-list"><AnimatePresence initial={false}>{filtered.map(item=><motion.article layout initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} exit={{opacity:0,height:0}} transition={{duration:.22}} className={`incident-row ${item.id===selected.id?'selected':''}`} key={item.id} onClick={()=>{setSelected(item);setAnalysis('')}}><div className="incident-row-title"><span className={`pill sev${item.severity.slice(-1)}`}>{item.severity}</span>{item.title}</div><p>{item.service} · {item.summary}</p><div className="incident-meta"><span className="pill">{item.status}</span><span className="pill">{item.time}</span></div></motion.article>)}</AnimatePresence>{filtered.length===0&&<p style={{padding:18,color:'#888'}}>No incidents match those filters.</p>}</div>{activeSection!=='Incident inbox'&&<WorkspaceSection section={activeSection} incidents={incidents} tickets={tickets} createTicket={createTicket} chatMessages={chatMessages} setChatMessages={setChatMessages} notify={notify} openBook={openBook} setOpenBook={setOpenBook} range={range} setRange={setRange} prefs={prefs} setPrefs={setPrefs} setActiveSection={setActiveSection} onSelectTicket={(id)=>{setActiveSection('Incident inbox'); const inc = incidents.find(i=>i.id===id); if(inc) setSelected(inc);}}/>}</section>
- <section className="detail-pane"><div className="detail-head"><div className="eyebrow">{selected.id} · {selected.time}</div><h2>{selected.title}</h2><div className="detail-tags"><span className={`pill sev${selected.severity.slice(-1)}`}>{selected.severity}</span><span className="pill">{selected.service}</span><span className="pill">{selected.status}</span></div></div><div className="detail-scroll"><h3>Alert summary</h3><p style={{fontSize:12,lineHeight:1.6,color:'#666'}}>{selected.summary}</p><h3>Alert payload</h3><pre className="payload">{selected.payload}</pre><h3>Service health · error rate</h3><div className="sparkline">{selected.metrics.map((n,i)=><i key={i} style={{height:`${n}%`}}/>)}</div><h3 style={{marginTop:25}}>Recent logs</h3><pre className="logbox">{selected.logs.join('\n')}</pre><h3 style={{marginTop:25}}>Recent deploy</h3><div className="deploy">{selected.deploy}<small>Deployment event · production</small></div></div></section>
- <aside className="ai-pane"><div className="ai-head"><span className="mark">✦</span><div>Copilot analysis<small>Grounded in your incident data</small></div></div><div className="ai-body"><div className="ai-intro">I’ve connected the alert, service health signals, logs and recent deployment context. Run an analysis to get a recommended next step.</div><button className="run-button" disabled={running} onClick={run}>{running?'Analyzing incident…':'✦  Run Copilot'}</button>{analysis?<div className="analysis">{formatAnalysis(analysis)}</div>:<div className="analysis" style={{color:'#999'}}>Your incident analysis will appear here with a root-cause hypothesis, confidence level and runbook steps.</div>}</div><div className="ai-actions"><button onClick={()=>changeStatus('Escalated')}>↗ Escalate to on-call</button><button onClick={()=>changeStatus('Resolved')}>✓ Auto-remediate</button></div></aside>{toast&&<div className="toast">{toast}</div>}</main>
+ const navItems:Section[]=['Incident inbox','Agent Orchestration','Tickets','On-call','Assistant','Integrations','Settings'];
+ return <main className={`solve ${activeSection!=='Incident inbox'?'has-other-view':''}`}><aside className="solve-sidebar"><Link className="brand" href="/"><span className="mark">⌘</span>DevOps Copilot</Link><div className="workspace-tag">WORKSPACE</div>{navItems.map((item,i)=><button key={item} className={`side-item ${activeSection===item?'on':''}`} onClick={()=>setActiveSection(item)}>{['▣','⚡','▤','◷','◉','⌘','⚙'][i]} &nbsp; {item}{item==='Incident inbox'&&<span>{incidents.filter(i=>i.status!=='Resolved').length}</span>}{item==='Tickets'&&<span>{tickets.length}</span>}</button>)}<div className="side-bottom"><button className="side-item" onClick={()=>setActiveSection('Settings')}>⚙ &nbsp; Workspace settings</button><Link className="side-item" href="/#faq">↗ &nbsp; Help center</Link></div></aside>
+ <section className="solve-main"><div className="solve-top"><b>{activeSection}</b>{activeSection==='Incident inbox'&&<button className="simulate" onClick={simulate}>＋ Simulate new incident</button>}</div><div className="inbox-tools"><input placeholder="⌕  Search incidents" value={search} onChange={e=>setSearch(e.target.value)}/><select value={severity} onChange={e=>setSeverity(e.target.value)}><option>All severity</option>{['SEV1','SEV2','SEV3','SEV4'].map(s=><option key={s}>{s}</option>)}</select><select value={service} onChange={e=>setService(e.target.value)}><option>All services</option>{services.map(s=><option key={s}>{s}</option>)}</select><select value={status} onChange={e=>setStatus(e.target.value)}><option>All status</option>{['Open','Investigating','Acknowledged','Resolved','Escalated'].map(s=><option key={s}>{s}</option>)}</select></div><div className="incident-list"><AnimatePresence initial={false}>{filtered.map(item=><motion.article layout initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} exit={{opacity:0,height:0}} transition={{duration:.22}} className={`incident-row ${item.severity.toLowerCase()} ${item.id===selected.id?'selected':''} ${item.status==='Resolved'?'resolved-ticket':''}`} key={item.id} onClick={()=>{setSelected(item);setAnalysis('')}}><div className="incident-row-title"><span className={`pill sev${item.severity.slice(-1)}`}>{item.severity}</span>{item.title}</div><p>{item.service} · {item.summary}</p><div className="incident-meta"><span className="pill">{item.status}</span><span className="pill">{item.time}</span></div></motion.article>)}</AnimatePresence>{filtered.length===0&&<p style={{padding:18,color:'#888'}}>No incidents match those filters.</p>}</div>{activeSection!=='Incident inbox'&&<WorkspaceSection section={activeSection} incidents={incidents} tickets={tickets} createTicket={createTicket} chatMessages={chatMessages} setChatMessages={setChatMessages} notify={notify} openBook={openBook} setOpenBook={setOpenBook} range={range} setRange={setRange} prefs={prefs} setPrefs={setPrefs} setActiveSection={setActiveSection} onSelectTicket={(id)=>{setActiveSection('Incident inbox'); const inc = incidents.find(i=>i.id===id); if(inc) setSelected(inc);}}/>}</section>
+ <section className="detail-pane"><div className="detail-head"><div className="eyebrow">{selected.id} · {selected.time}</div><h2>{selected.title}</h2><div className="detail-tags"><span className={`pill sev${selected.severity.slice(-1)}`}>{selected.severity}</span><span className="pill">{selected.service}</span><span className="pill">{selected.status}</span></div></div><div className="detail-scroll"><h3>Alert summary</h3><p style={{fontSize:12,lineHeight:1.6,color:'#666'}}>{selected.summary}</p><h3>Alert payload</h3><pre className="payload">{selected.payload}</pre><h3>Service health · error rate</h3><div className="sparkline">{selected.metrics.map((n,i)=><i key={i} style={{height:`${n}%`}}/>)}</div><h3 style={{marginTop:25}}>Recent logs</h3><pre className="payload" style={{marginTop: 12, whiteSpace: 'pre-wrap'}}>{selected.logs.join('\n')}</pre><h3 style={{marginTop:25}}>Recent deploy</h3><pre className="payload" style={{marginTop: 12, whiteSpace: 'pre-wrap'}}>{selected.deploy}</pre></div></section>
+ <aside className="ai-pane"><div className="ai-head"><span className="mark">✦</span><div>Copilot analysis<small>Grounded in your incident data</small></div></div><div className="ai-body"><div className="ai-intro">I’ve connected the alert, service health signals, logs and recent deployment context. Run an analysis to get a recommended next step.</div><button className="run-button" disabled={running} onClick={run}>{running?'Analyzing incident…':'✦  Run Copilot'}</button>{analysis?<div className="analysis">{formatAnalysis(analysis)}</div>:<div className="analysis" style={{color:'#999'}}>Your incident analysis will appear here with a root-cause hypothesis, confidence level and runbook steps.</div>}</div>{selected.status === 'Resolved' ? <div className="ai-actions" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.25))', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: 12, borderRadius: 8, fontWeight: 600, letterSpacing: 0.5}}>✓ Incident Resolved Automatically</div> : <div className="ai-actions"><button onClick={()=>changeStatus('Escalated')}>↗ Escalate to on-call</button><button onClick={()=>{ fetch('http://localhost:8000/api/voice/activate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id: 'default'})}).catch(console.error); notify('Voice Agent activated across all windows.'); }}>✓ Send to Agent</button></div>}</aside>{toast&&<div className="toast">{toast}</div>}</main>
 }
 
 function TicketIntake({tickets,createTicket,notify,openAssistant,chatMessages,onSelectTicket}:{tickets:Ticket[];createTicket:(data:{title:string;category:string;priority:string;description:string})=>Ticket;notify:(s:string)=>void;openAssistant:()=>void;chatMessages?:ChatMessage[];onSelectTicket?:(id:string)=>void}){
@@ -211,7 +247,7 @@ function TicketIntake({tickets,createTicket,notify,openAssistant,chatMessages,on
  }
  return <div className="workspace-section ticket-view"><div className="section-heading"><div><span className="eyebrow">SUPPORT REQUESTS</span><h2>What can we help with?</h2><p>Describe the problem and we’ll create a trackable support ticket with the details your team needs.</p></div><span className="secure-note">◈ &nbsp; Private to your workspace</span></div>
  <div className="ticket-layout"><form className="ticket-form" onSubmit={submit}><div className="ticket-form-heading"><span className="eyebrow">NEW SUPPORT TICKET</span><h3>Tell us what’s happening</h3><p>Include what you expected and what happened instead.</p></div><label>Short summary<input name="title" required minLength={6} maxLength={120} defaultValue={chatMessages && chatMessages.some(m => m.role === 'user') ? "Support Ticket from Chat" : ""} placeholder="e.g. Deploy is failing in production"/></label><div className="ticket-fields"><label>Issue type<select name="category" required defaultValue=""><option value="" disabled>Select a category</option><option>Incident response</option><option>Integration setup</option><option>Billing and account</option><option>Bug report</option><option>Other</option></select></label><label>Priority<select name="priority" defaultValue="Normal"><option>Low</option><option>Normal</option><option>High</option><option>Urgent</option></select></label></div><label>Describe the problem{summarizing && <span style={{marginLeft: 8, fontSize: 11, color: '#38bdf8'}}>✦ Summarizing chat history...</span>}<textarea name="description" required minLength={20} rows={5} value={description} onChange={e=>setDescription(e.target.value)} placeholder={summarizing ? "Generating problem summary from chat history..." : "What were you doing? What went wrong? Include an error message or incident ID if you have one."}/></label><div className="ticket-form-foot"><span>⏱ &nbsp; Typical first response: under 1 business day</span><button type="submit" className="button dark">Create support ticket <span>→</span></button></div></form>
- <aside className="ticket-side"><div className="ticket-side-head"><span className="ticket-side-icon">✦</span><div><b>Need help writing it?</b><small>Copilot Support Agent</small></div></div><p>Tell the assistant what’s wrong, and it can help you organize the details before you submit.</p><button className="text-action" onClick={openAssistant}>Start a conversation →</button><div className="ticket-side-sep"/><b className="recent-ticket-heading">Your recent tickets <span>{tickets.length}</span></b>{tickets.length===0?<p className="empty-tickets">New tickets you create will appear here with their status and reference number.</p>:tickets.slice(0,4).map(t=><div className={`ticket-mini ${t.priority.toLowerCase()}`} key={t.id} style={{cursor: 'pointer'}} onClick={()=>{if(onSelectTicket) onSelectTicket(t.id);}}><span className="ticket-status-dot"/><div><b>{t.title}</b><small>{t.id} · {t.status} · {t.priority}</small></div></div>)}</aside></div>
+ <aside className="ticket-side"><div className="ticket-side-head"><span className="ticket-side-icon">✦</span><div><b>Need help writing it?</b><small>Copilot Support Agent</small></div></div><p>Tell the assistant what’s wrong, and it can help you organize the details before you submit.</p><button className="text-action" onClick={openAssistant}>Start a conversation →</button><div className="ticket-side-sep"/><b className="recent-ticket-heading">Your recent tickets <span>{tickets.length}</span></b>{tickets.length===0?<p className="empty-tickets">New tickets you create will appear here with their status and reference number.</p>:tickets.slice(0,4).map(t=><div className={`ticket-mini ${t.priority.toLowerCase()} ${t.status==='Resolved'?'resolved-ticket':''}`} key={t.id} style={{cursor: 'pointer'}} onClick={()=>{if(onSelectTicket) onSelectTicket(t.id);}}><span className="ticket-status-dot"/><div><b>{t.title}</b><small>{t.id} · {t.status} · {t.priority}</small></div></div>)}</aside></div>
   {created&&<div className="ticket-created" style={{marginBottom: 32, alignItems: 'flex-start'}}><span className="ticket-created-icon">✓</span><div style={{flex: 1}}><b>Ticket {created.id} is open</b><p>{created.title} · {created.priority} priority · We’ll follow up in this workspace.</p>
     <AnimatePresence>
       {(loading || analysis) && (
@@ -475,6 +511,7 @@ function WorkspaceSection({section,incidents,tickets,createTicket,chatMessages,s
  const active=incidents.filter(i=>i.status!=='Resolved');
  return <div className="workspace-section" key={section}>
  {section==='On-call'&&<><div className="section-heading"><div><span className="eyebrow">PEOPLE & COVERAGE</span><h2>On-call schedule</h2><p>See who is carrying the pager and acknowledge the incidents that need a human.</p></div><button className="simulate" onClick={()=>notify('Schedule rotation preview updated.')}>⇄ Preview rotation</button></div><div className="oncall-banner"><div className="avatar-stack"><span>JS</span><span>MC</span><span>RP</span></div><div><b>Primary rotation · Platform</b><small>Current shift ends today at 18:00 UTC · 6h 14m remaining</small></div><span className="status-chip">● On shift</span></div><div className="workspace-cards"><article className="workspace-card duty"><span className="eyebrow">PRIMARY · ACTIVE NOW</span><h3>Jaya Singh</h3><p>Platform engineer · UTC−5</p><div className="duty-contact">⌁ &nbsp; PagerDuty connected<br/>✉ &nbsp; jaya@acme.dev</div><button className="text-action" onClick={()=>notify('Handoff note opened for Jaya Singh.')}>Prepare handoff note →</button></article><article className="workspace-card duty"><span className="eyebrow">SECONDARY</span><h3>Marcus Chen</h3><p>Senior SRE · UTC+0</p><div className="duty-contact">⌁ &nbsp; Escalation target<br/>◷ &nbsp; Next shift: today, 18:00 UTC</div><button className="text-action" onClick={()=>notify('Marcus Chen added as the incident follower.')}>Add as incident follower →</button></article></div><h3 className="list-heading">Needs acknowledgement <span>{active.length}</span></h3>{active.slice(0,4).map(i=><div className="compact-row" key={i.id}><span className={`pill sev${i.severity.slice(-1)}`}>{i.severity}</span><b>{i.title}</b><span>{i.service}</span><button onClick={()=>notify(`${i.id} acknowledged by you.`)}>Acknowledge</button></div>)}</>}
+ {section==='Agent Orchestration'&&<AgentOrchestration incident={incidents.find(i=>i.id===active[0]?.id) || incidents[0]} notify={notify} />}
  {section==='Tickets'&&<TicketIntake tickets={tickets} createTicket={createTicket} notify={notify} openAssistant={()=>setActiveSection('Assistant')} chatMessages={chatMessages} onSelectTicket={onSelectTicket}/>}
  {section==='Assistant'&&<SupportChat messages={chatMessages} setMessages={setChatMessages} notify={notify} openTickets={()=>setActiveSection('Tickets')}/>}
  {section==='Integrations'&&<IntegrationsPanel notify={notify}/>}
@@ -482,7 +519,124 @@ function WorkspaceSection({section,incidents,tickets,createTicket,chatMessages,s
  </div>
 }
 
+function AgentOrchestration({incident, notify}: {incident: Incident; notify: (s: string) => void}) {
+  const [pipelineState, setPipelineState] = useState<'idle'|'investigating'|'diagnosing'|'risk_assess'|'await_approval'|'executed'>('idle');
+  const [logFindings, setLogFindings] = useState('');
+  const [codeFindings, setCodeFindings] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [fixPlan, setFixPlan] = useState('');
+  const [voiceLogs, setVoiceLogs] = useState<string[]>([]);
 
+  useEffect(() => {
+    let active = true;
+    if (pipelineState === 'idle' && incident) {
+      setPipelineState('investigating');
+      (async () => {
+        try {
+          const [logRes, codeRes] = await Promise.all([
+            fetch('/api/analyze', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ incident, step: 'log' }) }),
+            fetch('/api/analyze', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ incident, step: 'code' }) })
+          ]);
+          if (!active) return;
+          const logData = await logRes.json();
+          const codeData = await codeRes.json();
+          setLogFindings(logData.summary);
+          setCodeFindings(codeData.summary);
 
+          setPipelineState('diagnosing');
+          const diagRes = await fetch('/api/analyze', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ incident, step: 'orchestrator', previousFindings: { log: logData.summary, code: codeData.summary } }) });
+          const diagData = await diagRes.json();
+          if (!active) return;
+          setDiagnosis(diagData.summary);
 
+          setPipelineState('risk_assess');
+          const fixRes = await fetch('/api/analyze', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ incident, step: 'fix', previousFindings: { orchestrator: diagData.summary } }) });
+          const fixData = await fixRes.json();
+          if (!active) return;
+          setFixPlan(fixData.summary);
+          setPipelineState('await_approval');
+        } catch (e) {
+          console.error(e);
+          setPipelineState('idle'); // retryable state on error
+        }
+      })();
+    }
+    return () => { active = false; };
+  }, [incident, pipelineState]);
 
+  return <div style={{width: '100%', maxWidth: 800}}>
+    <div className="section-heading"><div><span className="eyebrow">AGENT ORCHESTRATION</span><h2>Live Run Pipeline</h2><p>Observe multi-agent incident investigation and approve remediation plans.</p></div><span className="secure-note">◈ &nbsp; Human-in-the-loop active</span></div>
+    
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      <AgentRow name="Log Analysis Agent" model="qwen2.5:3b" status={pipelineState === 'idle' ? 'pending' : (logFindings ? 'done' : 'running')} taskType="Data Retrieval" taskAction="Analyzing metrics and logs to identify anomalies..." output={logFindings} />
+      <AgentRow name="Code & Commit Agent" model="qwen2.5-coder:7b" status={pipelineState === 'idle' ? 'pending' : (codeFindings ? 'done' : 'running')} taskType="Code Analysis" taskAction="Scanning recent deployment commits and PRs for suspicious changes..." output={codeFindings} />
+      <AgentRow name="Orchestrator Agent" model="qwen3:8b" status={['idle','investigating'].includes(pipelineState) ? 'pending' : (diagnosis ? 'done' : 'running')} taskType="Synthesis" taskAction="Synthesizing findings into a root-cause hypothesis..." output={diagnosis} />
+      <AgentRow name="Fix Agent" model="qwen2.5-coder:7b" status={['idle','investigating','diagnosing'].includes(pipelineState) ? 'pending' : (fixPlan ? 'done' : 'running')} taskType="Execution Planning" taskAction="Drafting remediation steps and generating code patches..." output={fixPlan} />
+    </div>
+
+    {pipelineState === 'await_approval' && (
+      <div style={{marginTop: 24, padding: 24, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 8}}>
+        <h3 style={{color: '#ef4444', marginBottom: 12}}>High Risk: Approval Required</h3>
+        <p style={{marginBottom: 16, fontSize: 14}}>The proposed fix involves modifying the repository or altering deployment configuration. This action requires human approval to execute.</p>
+        <div style={{display: 'flex', gap: 12}}>
+          <button className="button" style={{background: 'rgba(255,255,255,0.1)'}} onClick={() => { setPipelineState('idle'); setLogFindings(''); setCodeFindings(''); setDiagnosis(''); setFixPlan(''); notify('Run rejected. Pipeline reset.'); }}>Reject</button>
+          <button className="button" style={{background: '#ef4444', color: '#fff'}} onClick={() => { setPipelineState('executed'); notify('Executing fix plan...'); }}>Approve & Execute</button>
+        </div>
+      </div>
+    )}
+    
+    {pipelineState === 'executed' && (
+      <div style={{marginTop: 24, padding: 24, background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: 8}}>
+        <h3 style={{color: '#22c55e'}}>Fix Executed</h3>
+        <p style={{fontSize: 14, marginTop: 8}}>The remediation plan was successfully applied and a ticket has been filed.</p>
+      </div>
+    )}
+    
+    {voiceLogs.length > 0 && (
+      <div style={{marginTop: 32, padding: '24px 0', borderTop: '1px solid #333'}}>
+        <h3 style={{marginBottom: 16, color: '#ccc'}}>Voice Agent Stream</h3>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 8, fontFamily: 'monospace', fontSize: 13}}>
+          {voiceLogs.map((log, i) => (
+             <div key={i} style={{display: 'flex', gap: 12}}>
+               <span style={{color: '#888'}}>▶</span>
+               <span style={{color: log.includes('approved') || log.includes('resolved') ? '#22c55e' : log.includes('permission') ? '#eab308' : '#e5e7eb'}}>{log}</span>
+             </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>;
+}
+
+function AgentRow({name, model, status, output, taskType, taskAction}: {name: string; model: string; status: 'pending'|'running'|'done'|'error'; output: string; taskType?: string; taskAction?: string}) {
+  const [expanded, setExpanded] = useState(false);
+  return <div style={{border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, background: 'rgba(255,255,255,0.03)', overflow: 'hidden'}}>
+    <div style={{padding: '12px 16px', cursor: output ? 'pointer' : 'default'}} onClick={() => output && setExpanded(!expanded)}>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+            <b style={{fontSize: 14}}>{name}</b>
+            <span style={{fontSize: 11, padding: '2px 6px', background: 'rgba(255,255,255,0.1)', borderRadius: 4}}>{model}</span>
+          </div>
+          {taskType && taskAction && (
+          <div style={{fontSize: 12, color: '#aaa', display: 'flex', alignItems: 'center', gap: 10}}>
+            <span style={{background: status === 'pending' ? 'rgba(255,255,255,0.05)' : 'rgba(56, 189, 248, 0.1)', color: status === 'pending' ? '#888' : '#38bdf8', padding: '2px 6px', borderRadius: 4, fontSize: 10, textTransform: 'uppercase', fontWeight: 600, letterSpacing: 0.5}}>{taskType}</span>
+            <span>{status === 'running' || status === 'done' ? taskAction : 'Waiting in queue...'}</span>
+          </div>
+          )}
+        </div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginTop: 4}}>
+          <span style={{fontSize: 12, color: status === 'running' ? '#38bdf8' : status === 'done' ? '#22c55e' : '#888'}}>
+            {status === 'running' ? '● Running...' : status === 'done' ? '✓ Complete' : 'Pending'}
+          </span>
+          {output && <span style={{fontSize: 12, color: '#888', marginLeft: 8}}>{expanded ? '▲' : '▼'}</span>}
+        </div>
+      </div>
+    </div>
+    {expanded && output && (
+      <div style={{padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap'}}>
+        {formatAnalysis(output)}
+      </div>
+    )}
+  </div>
+}

@@ -11,3 +11,8 @@ pydantic-settings
 python-dotenv
 elasticsearch
 gitpython
+
+SpeechRecognition
+pygetwindow
+pyttsx3
+pyaudio
