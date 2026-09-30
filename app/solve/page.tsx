@@ -39,17 +39,78 @@ export default function Solve(){const [incidents,setIncidents]=useState(seed);co
 
 function TicketIntake({tickets,createTicket,notify,openAssistant}:{tickets:Ticket[];createTicket:(data:{title:string;category:string;priority:string;description:string})=>Ticket;notify:(s:string)=>void;openAssistant:()=>void}){
  const [created,setCreated]=useState<Ticket|null>(null);
- function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);const ticket=createTicket({title:String(f.get('title')),category:String(f.get('category')),priority:String(f.get('priority')),description:String(f.get('description'))});setCreated(ticket);e.currentTarget.reset()}
+ const [analysis,setAnalysis]=useState<string>('');
+ const [loading,setLoading]=useState(false);
+ 
+ async function submit(e:FormEvent<HTMLFormElement>){
+   e.preventDefault();
+   const f=new FormData(e.currentTarget);
+   const title = String(f.get('title'));
+   const description = String(f.get('description'));
+   const ticket=createTicket({title,category:String(f.get('category')),priority:String(f.get('priority')),description});
+   setCreated(ticket);
+   e.currentTarget.reset();
+   
+   setLoading(true);
+   setAnalysis('');
+   try {
+     const res = await fetch('/api/ticket', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ title, description })
+     });
+     const data = await res.json();
+     setAnalysis(data.analysis);
+   } catch (err) {
+     setAnalysis('Could not reach Ticket KB Agent.');
+   } finally {
+     setLoading(false);
+   }
+ }
  return <div className="workspace-section ticket-view"><div className="section-heading"><div><span className="eyebrow">SUPPORT REQUESTS</span><h2>What can we help with?</h2><p>Describe the problem and we’ll create a trackable support ticket with the details your team needs.</p></div><span className="secure-note">◈ &nbsp; Private to your workspace</span></div>
- {created&&<div className="ticket-created"><span className="ticket-created-icon">✓</span><div><b>Ticket {created.id} is open</b><p>{created.title} · {created.priority} priority · We’ll follow up in this workspace.</p></div><button onClick={()=>setCreated(null)}>Create another</button></div>}
+ {created&&<div className="ticket-created"><span className="ticket-created-icon">✓</span><div><b>Ticket {created.id} is open</b><p>{created.title} · {created.priority} priority · We’ll follow up in this workspace.</p>{loading && <p style={{marginTop: 8}}><em>Copilot is analyzing your ticket...</em></p>}{analysis && <div style={{marginTop: 12, padding: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)'}}><b style={{fontSize: 12, color: '#999'}}>COPILOT TICKET ANALYSIS</b><p style={{fontSize: 14, marginTop: 6, lineHeight: 1.5, whiteSpace: 'pre-wrap'}}>{analysis}</p></div>}</div><button onClick={()=>{setCreated(null);setAnalysis('');}}>Create another</button></div>}
  <div className="ticket-layout"><form className="ticket-form" onSubmit={submit}><div className="ticket-form-heading"><span className="eyebrow">NEW SUPPORT TICKET</span><h3>Tell us what’s happening</h3><p>Include what you expected and what happened instead.</p></div><label>Short summary<input name="title" required minLength={6} maxLength={120} placeholder="e.g. Deploy is failing in production"/></label><div className="ticket-fields"><label>Issue type<select name="category" required defaultValue=""><option value="" disabled>Select a category</option><option>Incident response</option><option>Integration setup</option><option>Billing and account</option><option>Bug report</option><option>Other</option></select></label><label>Priority<select name="priority" defaultValue="Normal"><option>Low</option><option>Normal</option><option>High</option><option>Urgent</option></select></label></div><label>Describe the problem<textarea name="description" required minLength={20} rows={5} placeholder="What were you doing? What went wrong? Include an error message or incident ID if you have one."/></label><div className="ticket-form-foot"><span>⏱ &nbsp; Typical first response: under 1 business day</span><button type="submit" className="button dark">Create support ticket <span>→</span></button></div></form>
  <aside className="ticket-side"><div className="ticket-side-head"><span className="ticket-side-icon">✦</span><div><b>Need help writing it?</b><small>Copilot Support Agent</small></div></div><p>Tell the assistant what’s wrong, and it can help you organize the details before you submit.</p><button className="text-action" onClick={openAssistant}>Start a conversation →</button><div className="ticket-side-sep"/><b className="recent-ticket-heading">Your recent tickets <span>{tickets.length}</span></b>{tickets.length===0?<p className="empty-tickets">New tickets you create will appear here with their status and reference number.</p>:tickets.slice(0,4).map(t=><div className="ticket-mini" key={t.id}><span className="ticket-status-dot"/><div><b>{t.title}</b><small>{t.id} · {t.status} · {t.priority}</small></div></div>)}</aside></div></div>
 }
 
 function SupportChat({messages,setMessages,notify,openTickets}:{messages:ChatMessage[];setMessages:(v:ChatMessage[]|((p:ChatMessage[])=>ChatMessage[]))=>void;notify:(s:string)=>void;openTickets:()=>void}){
  const [draft,setDraft]=useState('');
- function send(e:FormEvent<HTMLFormElement>){e.preventDefault();const text=draft.trim();if(!text)return;const user:ChatMessage={role:'user',text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};const lower=text.toLowerCase();let reply='Thanks for the details. I’ve noted the symptoms. Can you share the affected service, when this started, and any error message you’re seeing?';if(lower.includes('integrat')||lower.includes('connect'))reply='I can help with an integration. Open Integrations to choose the provider, then connect it with the permissions your workspace allows.';else if(lower.includes('ticket')||lower.includes('support'))reply='I can open a trackable support request for you. Go to Tickets, summarize the issue, choose a priority, and include the steps to reproduce it.';else if(lower.includes('incident')||lower.includes('error')||lower.includes('down'))reply='I’m sorry you’re dealing with that. I’ll help gather impact and timing first. Is production affected, and what changed just before the issue began?';const agent:ChatMessage={role:'agent',text:reply,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};setMessages(prev=>{const next=[...prev,user,agent];localStorage.setItem('devops-support-chat',JSON.stringify(next));return next});setDraft('')}
- return <div className="workspace-section assistant-view"><div className="section-heading"><div><span className="eyebrow">SUPPORT CONVERSATION</span><h2>Chat with Copilot</h2><p>Describe an issue, get guided next steps, or open a trackable support ticket.</p></div><span className="agent-presence"><i/> Agent available</span></div><div className="chat-shell"><header className="chat-header"><span className="chat-agent-mark">✦</span><div><b>Copilot Support Agent</b><small><i/> Usually replies instantly</small></div><button onClick={openTickets}>＋ New ticket</button></header><div className="chat-messages" aria-live="polite">{messages.map((m,i)=><div className={`chat-message ${m.role}`} key={`${i}-${m.time}`}><span className="chat-avatar">{m.role==='agent'?'✦':'You'}</span><div className="chat-bubble-wrap"><small>{m.role==='agent'?'Copilot Support Agent':'You'} · {m.time}</small><div className="chat-bubble">{m.text}</div></div></div>)}</div><form className="chat-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} aria-label="Message the support agent" placeholder="Describe the issue or ask a question…"/><button className="button dark" type="submit" disabled={!draft.trim()}>Send <span>↑</span></button></form><div className="chat-privacy">Your conversation is saved in this browser workspace. Don’t share passwords or API keys.</div></div></div>
+ const [isThinking,setIsThinking]=useState(false);
+ async function send(e:FormEvent<HTMLFormElement>){
+   e.preventDefault();
+   const text=draft.trim();
+   if(!text)return;
+   const user:ChatMessage={role:'user',text,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+   
+   setMessages(prev=>{
+     const next=[...prev,user];
+     localStorage.setItem('devops-support-chat',JSON.stringify(next));
+     return next;
+   });
+   setDraft('');
+   setIsThinking(true);
+   
+   try {
+     const res = await fetch('/api/chat', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ messages: [...messages, user] })
+     });
+     const data = await res.json();
+     const agent:ChatMessage={role:'agent',text:data.reply,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+     setMessages(prev=>{
+       const next=[...prev,agent];
+       localStorage.setItem('devops-support-chat',JSON.stringify(next));
+       return next;
+     });
+   } catch (e) {
+     const errorMsg:ChatMessage={role:'agent',text:'Network error while reaching the Conversation Agent.',time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+     setMessages(prev=>[...prev,errorMsg]);
+   } finally {
+     setIsThinking(false);
+   }
+ }
+ return <div className="workspace-section assistant-view"><div className="section-heading"><div><span className="eyebrow">SUPPORT CONVERSATION</span><h2>Chat with Copilot</h2><p>Describe an issue, get guided next steps, or open a trackable support ticket.</p></div><span className="agent-presence"><i/> Agent available</span></div><div className="chat-shell"><header className="chat-header"><span className="chat-agent-mark">✦</span><div><b>Copilot Support Agent</b><small><i/> Usually replies instantly</small></div><button onClick={openTickets}>＋ New ticket</button></header><div className="chat-messages" aria-live="polite">{messages.map((m,i)=><div className={`chat-message ${m.role}`} key={`${i}-${m.time}`}><span className="chat-avatar">{m.role==='agent'?'✦':'You'}</span><div className="chat-bubble-wrap"><small>{m.role==='agent'?'Copilot Support Agent':'You'} · {m.time}</small><div className="chat-bubble">{m.text}</div></div></div>)}{isThinking && <div className="chat-message agent"><span className="chat-avatar">✦</span><div className="chat-bubble-wrap"><small>Copilot Support Agent · Thinking</small><div className="chat-bubble"><motion.div style={{display:'flex',gap:4,padding:4}}><motion.span animate={{opacity:[0.3,1,0.3]}} transition={{repeat:Infinity,duration:1.2,delay:0}} style={{width:6,height:6,borderRadius:'50%',background:'currentColor'}}/><motion.span animate={{opacity:[0.3,1,0.3]}} transition={{repeat:Infinity,duration:1.2,delay:0.2}} style={{width:6,height:6,borderRadius:'50%',background:'currentColor'}}/><motion.span animate={{opacity:[0.3,1,0.3]}} transition={{repeat:Infinity,duration:1.2,delay:0.4}} style={{width:6,height:6,borderRadius:'50%',background:'currentColor'}}/></motion.div></div></div></div>}</div><form className="chat-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} aria-label="Message the support agent" placeholder="Describe the issue or ask a question…"/><button className="button dark" type="submit" disabled={!draft.trim()||isThinking}>Send <span>↑</span></button></form><div className="chat-privacy">Your conversation is saved in this browser workspace. Don’t share passwords or API keys.</div></div></div>
 }
 
 function IntegrationsPanel({notify}:{notify:(s:string)=>void}){

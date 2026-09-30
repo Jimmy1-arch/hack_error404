@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+langgraph
+langchain
+langchain-ollama
+redis
+chromadb
+websockets
+pydantic
+pydantic-settings
+python-dotenv
+elasticsearch
+gitpython
