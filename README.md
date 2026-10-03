@@ -1,4 +1,4 @@
-# DevOps Copilot
+# DevOps Copilot : HACKATHON
 
 DevOps Copilot is an intelligent, reactive incident-response workspace built with a Next.js frontend, a FastAPI/LangGraph backend, and deep IDE integration via a VS Code extension and a desktop Voice Agent.
 
